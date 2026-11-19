@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Staff Check-In</title>
+
+  <!-- iPad PWA / Add to Home Screen Config -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Check-In" />
+  <link rel="apple-touch-icon" href="icon.png" />
+  <link rel="manifest" href="manifest.json" />
+
+  <style>
+    :root {
+      --bg: #f2f2f7;
+      --card: #ffffff;
+      --primary: #007aff;
+      --green: #34c759;
+      --orange: #ff9500;
+      --text: #1c1c1e;
+      --muted: #8e8e93;
+      --border: #d1d1d6;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    .app-shell {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      max-width: 1024px;
+      margin: 0 auto;
+    }
+
+    header {
+      padding: 16px 20px 12px;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 10;
+    }
+
+    .top-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    #searchInput {
+      flex: 1;
+      padding: 12px 16px;
+      font-size: 17px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      outline: none;
+    }
+
+    #searchInput:focus {
+      border-color: var(--primary);
+      background: #fff;
+    }
+
+    .sync-btn {
+      padding: 12px 18px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 12px;
+      border: none;
+      background: var(--bg);
+      color: var(--primary);
+      cursor: pointer;
+    }
+
+    .sync-btn:disabled {
+      opacity: 0.5;
+    }
+
+    /* Single Sliding Toggle Button */
+    .toggle-container {
+      display: flex;
+      background: var(--bg);
+      border-radius: 12px;
+      padding: 4px;
+      position: relative;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle-pill {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      width: calc(50% - 4px);
+      height: calc(100% - 8px);
+      background: var(--card);
+      border-radius: 9px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+      transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+
+    .toggle-container.show-signed-in .toggle-pill {
+      transform: translateX(100%);
+    }
+
+    .toggle-label {
+      flex: 1;
+      text-align: center;
+      padding: 10px 0;
+      font-size: 16px;
+      font-weight: 600;
+      z-index: 1;
+      color: var(--muted);
+      transition: color 0.25s;
+    }
+
+    .toggle-container:not(.show-signed-in) .toggle-label.out-label,
+    .toggle-container.show-signed-in .toggle-label.in-label {
+      color: var(--text);
+    }
+
+    /* Sliding Two-Pane Viewport */
+    .viewport {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .slider-track {
+      display: flex;
+      width: 200%;
+      height: 100%;
+      transition: transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+
+    .slider-track.slide-right {
+      transform: translateX(-50%);
+    }
+
+    .pane {
+      width: 50%;
+      height: 100%;
+      overflow-y: auto;
+      padding: 20px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 14px;
+    }
+
+    .person-btn {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px 16px;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+      text-align: center;
+      cursor: pointer;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.04);
+      transition: transform 0.1s, opacity 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .person-btn:active {
+      transform: scale(0.97);
+    }
+
+    .person-btn.syncing {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    .badge {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+
+    .badge.out {
+      background: #fff3e0;
+      color: var(--orange);
+    }
+
+    .badge.in {
+      background: #e8f8ed;
+      color: var(--green);
+    }
+
+    .status-msg {
+      text-align: center;
+      color: var(--muted);
+      margin-top: 40px;
+      font-size: 17px;
+      grid-column: 1 / -1;
+    }
+  </style>
+</head>
+<body>
+
+<div class="app-shell">
+  <header>
+    <div class="top-row">
+      <input type="search" id="searchInput" placeholder="Filter by first or last name..." autocomplete="off" />
+      <button class="sync-btn" id="syncBtn" onclick="loadRoster()">Sync</button>
+    </div>
+
+    <div class="toggle-container" id="viewToggle" onclick="toggleView()">
+      <div class="toggle-pill"></div>
+      <div class="toggle-label out-label">Signed Out (<span id="outCount">0</span>)</div>
+      <div class="toggle-label in-label">Signed In (<span id="inCount">0</span>)</div>
+    </div>
+  </header>
+
+  <div class="viewport">
+    <div class="slider-track" id="sliderTrack">
+      <section class="pane">
+        <div class="grid" id="signedOutGrid">
+          <div class="status-msg">Loading staff list...</div>
+        </div>
+      </section>
+
+      <section class="pane">
+        <div class="grid" id="signedInGrid"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+  // PASTE YOUR DEPLOYED GOOGLE APPS SCRIPT WEB APP URL HERE:
+  const SCRIPT_URL = 'YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL';
+
+  let roster = [];
+  let showingSignedIn = false;
+
+  const searchInput = document.getElementById('searchInput');
+  const viewToggle = document.getElementById('viewToggle');
+  const sliderTrack = document.getElementById('sliderTrack');
+  const signedOutGrid = document.getElementById('signedOutGrid');
+  const signedInGrid = document.getElementById('signedInGrid');
+  const syncBtn = document.getElementById('syncBtn');
+
+  searchInput.addEventListener('input', render);
+
+  function toggleView() {
+    showingSignedIn = !showingSignedIn;
+    viewToggle.classList.toggle('show-signed-in', showingSignedIn);
+    sliderTrack.classList.toggle('slide-right', showingSignedIn);
+  }
+
+  async function loadRoster() {
+    syncBtn.disabled = true;
+    syncBtn.textContent = 'Syncing...';
+    try {
+      const res = await fetch(SCRIPT_URL);
+      const json = await res.json();
+      if (json.status === 'success') {
+        roster = json.data;
+        render();
+      } else {
+        throw new Error(json.message || 'Unknown error');
+      }
+    } catch (err) {
+      signedOutGrid.innerHTML = '<div class="status-msg">Could not load spreadsheet. Verify SCRIPT_URL and deployment access ("Anyone").</div>';
+      console.error(err);
+    } finally {
+      syncBtn.disabled = false;
+      syncBtn.textContent = 'Sync';
+    }
+  }
+
+  function render() {
+    const query = searchInput.value.trim().toLowerCase();
+
+    const filtered = roster.filter(person => {
+      if (!query) return true;
+      return (
+        person.firstName.toLowerCase().includes(query) ||
+        person.lastName.toLowerCase().includes(query) ||
+        `${person.firstName} ${person.lastName}`.toLowerCase().includes(query)
+      );
+    });
+
+    const signedOutPeople = filtered.filter(p => p.status === 'signed out');
+    const signedInPeople = filtered.filter(p => p.status === 'signed in');
+
+    document.getElementById('outCount').textContent = signedOutPeople.length;
+    document.getElementById('inCount').textContent = signedInPeople.length;
+
+    renderGrid(signedOutGrid, signedOutPeople, 'No signed-out staff match.');
+    renderGrid(signedInGrid, signedInPeople, 'No signed-in staff match.');
+  }
+
+  function renderGrid(container, list, emptyText) {
+    container.innerHTML = '';
+    if (list.length === 0) {
+      container.innerHTML = `<div class="status-msg">${emptyText}</div>`;
+      return;
+    }
+
+    list.forEach(person => {
+      const btn = document.createElement('button');
+      btn.className = 'person-btn';
+      const isSignedIn = person.status === 'signed in';
+      btn.innerHTML = `
+        <span>${person.firstName} ${person.lastName}</span>
+        <span class="badge ${isSignedIn ? 'in' : 'out'}">${person.status}</span>
+      `;
+      btn.onclick = () => togglePersonStatus(person);
+      container.appendChild(btn);
+    });
+  }
+
+  async function togglePersonStatus(person) {
+    const previousStatus = person.status;
+    const newStatus = previousStatus === 'signed out' ? 'signed in' : 'signed out';
+
+    // Optimistic UI update so iPad tap feels instant
+    person.status = newStatus;
+    render();
+
+    try {
+      const res = await fetch(SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          col: person.col,
+          newStatus: newStatus
+        })
+      });
+      const json = await res.json();
+      if (json.status !== 'success') throw new Error(json.message);
+    } catch (err) {
+      person.status = previousStatus;
+      render();
+      alert(`Failed to update ${person.firstName} ${person.lastName}. Check connection and try again.`);
+      console.error(err);
+    }
+  }
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+
+  loadRoster();
+</script>
+</body>
+</html>
