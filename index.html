@@ -18,9 +18,10 @@
       --card: #ffffff;
       --primary: #007aff;
       --green: #34c759;
+      --green-bg: #e8f8ed;
       --orange: #ff9500;
       --text: #1c1c1e;
-      --muted: #8e8e93;
+      --muted: #6e6e73;
       --border: #d1d1d6;
     }
 
@@ -168,49 +169,83 @@
       gap: 14px;
     }
 
+    /* Person Card Button */
     .person-btn {
+      position: relative;
       background: var(--card);
-      border: 1px solid var(--border);
+      border: 2px solid var(--border);
       border-radius: 14px;
       padding: 20px 16px;
-      font-size: 18px;
-      font-weight: 600;
-      color: var(--text);
+      min-height: 98px;
       text-align: center;
       cursor: pointer;
       box-shadow: 0 2px 5px rgba(0,0,0,0.04);
-      transition: transform 0.1s, opacity 0.2s;
+      transition: transform 0.12s, background-color 0.2s, border-color 0.2s;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 6px;
+      justify-content: center;
+      gap: 4px;
+      overflow: hidden;
     }
 
     .person-btn:active {
       transform: scale(0.97);
     }
 
-    .person-btn.syncing {
-      opacity: 0.5;
-      pointer-events: none;
+    /* Armed / Selected State: Turns Green */
+    .person-btn.armed {
+      background: var(--green-bg);
+      border-color: var(--green);
     }
 
-    .badge {
-      font-size: 12px;
+    .last-name {
+      font-size: 20px;
       font-weight: 700;
-      text-transform: uppercase;
-      padding: 3px 8px;
-      border-radius: 6px;
+      color: #000000;
+      line-height: 1.2;
     }
 
-    .badge.out {
-      background: #fff3e0;
-      color: var(--orange);
+    .first-name {
+      font-size: 15px;
+      font-weight: 400;
+      color: #7c7c80;
+      line-height: 1.2;
     }
 
-    .badge.in {
-      background: #e8f8ed;
-      color: var(--green);
+    /* Confirmation Button Overlay */
+    .confirm-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(52, 199, 89, 0.22);
+      backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2;
+      animation: popIn 0.15s ease-out;
+    }
+
+    .confirm-action-btn {
+      background: var(--green);
+      color: #ffffff;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 22px;
+      font-size: 17px;
+      font-weight: 700;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      cursor: pointer;
+    }
+
+    .confirm-action-btn:active {
+      transform: scale(0.95);
+    }
+
+    @keyframes popIn {
+      from { opacity: 0; transform: scale(0.92); }
+      to { opacity: 1; transform: scale(1); }
     }
 
     .status-msg {
@@ -254,11 +289,11 @@
 </div>
 
 <script>
-  // PASTE YOUR DEPLOYED GOOGLE APPS SCRIPT WEB APP URL HERE:
   const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzuBXmj7Ou8PMjbP298Rd4sX1qEgOBUJQRZHX46XQYVF2GfSxcNSVdKQGdKovsHCc4EHw/exec';
 
   let roster = [];
   let showingSignedIn = false;
+  let armedCol = null; // Tracks which person's button is currently showing the confirmation overlay
 
   const searchInput = document.getElementById('searchInput');
   const viewToggle = document.getElementById('viewToggle');
@@ -267,15 +302,29 @@
   const signedInGrid = document.getElementById('signedInGrid');
   const syncBtn = document.getElementById('syncBtn');
 
-  searchInput.addEventListener('input', render);
+  searchInput.addEventListener('input', () => {
+    armedCol = null;
+    render();
+  });
+
+  // Tap anywhere outside a person card to cancel the confirmation overlay
+  document.addEventListener('click', (e) => {
+    if (armedCol !== null && !e.target.closest('.person-btn')) {
+      armedCol = null;
+      render();
+    }
+  });
 
   function toggleView() {
+    armedCol = null;
     showingSignedIn = !showingSignedIn;
     viewToggle.classList.toggle('show-signed-in', showingSignedIn);
     sliderTrack.classList.toggle('slide-right', showingSignedIn);
+    render();
   }
 
   async function loadRoster() {
+    armedCol = null;
     syncBtn.disabled = true;
     syncBtn.textContent = 'Syncing...';
     try {
@@ -288,7 +337,7 @@
         throw new Error(json.message || 'Unknown error');
       }
     } catch (err) {
-      signedOutGrid.innerHTML = '<div class="status-msg">Could not load spreadsheet. Verify SCRIPT_URL and deployment access ("Anyone").</div>';
+      signedOutGrid.innerHTML = `<div class="status-msg">Could not load spreadsheet: ${err.message}</div>`;
       console.error(err);
     } finally {
       syncBtn.disabled = false;
@@ -296,17 +345,25 @@
     }
   }
 
+  function sortByLastName(a, b) {
+    const lastCompare = a.lastName.localeCompare(b.lastName, undefined, { sensitivity: 'base' });
+    if (lastCompare !== 0) return lastCompare;
+    return a.firstName.localeCompare(b.firstName, undefined, { sensitivity: 'base' });
+  }
+
   function render() {
     const query = searchInput.value.trim().toLowerCase();
 
-    const filtered = roster.filter(person => {
-      if (!query) return true;
-      return (
-        person.firstName.toLowerCase().includes(query) ||
-        person.lastName.toLowerCase().includes(query) ||
-        `${person.firstName} ${person.lastName}`.toLowerCase().includes(query)
-      );
-    });
+    const filtered = roster
+      .filter(person => {
+        if (!query) return true;
+        return (
+          person.firstName.toLowerCase().includes(query) ||
+          person.lastName.toLowerCase().includes(query) ||
+          `${person.firstName} ${person.lastName}`.toLowerCase().includes(query)
+        );
+      })
+      .sort(sortByLastName);
 
     const signedOutPeople = filtered.filter(p => p.status === 'signed out');
     const signedInPeople = filtered.filter(p => p.status === 'signed in');
@@ -326,15 +383,46 @@
     }
 
     list.forEach(person => {
-      const btn = document.createElement('button');
-      btn.className = 'person-btn';
+      const isArmed = armedCol === person.col;
       const isSignedIn = person.status === 'signed in';
-      btn.innerHTML = `
-        <span>${person.firstName} ${person.lastName}</span>
-        <span class="badge ${isSignedIn ? 'in' : 'out'}">${person.status}</span>
+      const promptLabel = isSignedIn ? 'Sign out?' : 'Sign in?';
+
+      const card = document.createElement('div');
+      card.className = `person-btn${isArmed ? ' armed' : ''}`;
+      card.setAttribute('role', 'button');
+      card.setAttribute('tabindex', '0');
+
+      card.innerHTML = `
+        <div class="last-name">${person.lastName}</div>
+        <div class="first-name">${person.firstName}</div>
       `;
-      btn.onclick = () => togglePersonStatus(person);
-      container.appendChild(btn);
+
+      // Tapping the card arms/disarms the green confirmation state
+      card.onclick = (e) => {
+        e.stopPropagation();
+        armedCol = isArmed ? null : person.col;
+        render();
+      };
+
+      // If armed, render the "Sign in?" or "Sign out?" button overlay
+      if (isArmed) {
+        const overlay = document.createElement('div');
+        overlay.className = 'confirm-overlay';
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.className = 'confirm-action-btn';
+        confirmBtn.textContent = promptLabel;
+        confirmBtn.onclick = (e) => {
+          e.stopPropagation();
+          armedCol = null;
+          togglePersonStatus(person);
+        };
+
+        overlay.appendChild(confirmBtn);
+        card.appendChild(overlay);
+      }
+
+      container.appendChild(card);
     });
   }
 
